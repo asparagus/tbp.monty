@@ -9,6 +9,7 @@
 # https://opensource.org/licenses/MIT.
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
@@ -20,6 +21,9 @@ from tbp.monty.frameworks.models.states import State
 
 if TYPE_CHECKING:
     from numbers import Number
+
+
+logger = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -283,9 +287,19 @@ class DepthTo3DLocations:
 
         if isinstance(zooms, (int, float)):
             zooms = [zooms] * len(sensor_ids)
+        elif len(zooms) != len(sensor_ids):
+            logger.warning(
+                f"Mismatched lengths of zooms ({len(zooms)}) "
+                f"and sensor_ids {len(sensor_ids)}"
+            )
 
         if isinstance(hfov, (int, float)):
             hfov = [hfov] * len(sensor_ids)
+        elif len(hfov) != len(sensor_ids):
+            logger.warning(
+                f"Mismatched lengths of hfov ({len(hfov)}) "
+                f"and sensor_ids {len(sensor_ids)}"
+            )
 
         for i, zoom in enumerate(zooms):
             # Pinhole camera, focal length fx = fy
