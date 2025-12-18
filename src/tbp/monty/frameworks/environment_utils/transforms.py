@@ -9,7 +9,7 @@
 # https://opensource.org/licenses/MIT.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
 import quaternion as qt
@@ -20,6 +20,7 @@ from tbp.monty.frameworks.models.states import State
 
 if TYPE_CHECKING:
     from numbers import Number
+
 
 __all__ = [
     "AddNoiseToRawDepthImage",
@@ -241,11 +242,10 @@ class DepthTo3DLocations:
 
     Attributes:
         agent_id: Agent ID to get observations from
-        resolution: Camera resolution (H, W)
-        zoom: Camera zoom factor. Defaul 1.0 (no zoom)
-        hfov: Camera HFOV, default 90 degrees
-        semantic_sensor: Semantic sensor id. Default "semantic"
-        depth_sensor: Depth sensor id. Default "depth"
+        sensor_ids: List of ids for each sensor
+        resolutions: Camera resolution (H, W) for each sensor.
+        zooms: Camera zoom factors for each sensor. Default 1.0 (no zoom)
+        hfov: Camera HFOV for each sensor. Default 90 degrees
         world_coord: Whether to return 3D locations in world coordinates.
             If enabled, then :meth:`__call__` must be called with
             the agent and sensor states in addition to observations.
@@ -256,6 +256,8 @@ class DepthTo3DLocations:
             transform where all values > clip_value are set to
             clip_value. Empty list ~ apply to none of them.
         clip_value: depth parameter for the clipping transform
+        use_semantic_sensor: Whether to use a semantic sensor (used with multi-object
+            experiments). Default False
 
     Warning:
         This transformation is only valid for pinhole cameras
@@ -264,15 +266,15 @@ class DepthTo3DLocations:
     def __init__(
         self,
         agent_id: AgentID,
-        sensor_ids,
-        resolutions,
-        zooms=1.0,
-        hfov=90.0,
-        clip_value=0.05,
-        depth_clip_sensors=None,
-        world_coord=True,
-        get_all_points=False,
-        use_semantic_sensor=False,
+        sensor_ids: Sequence[str],
+        resolutions: Sequence[tuple[int, int]],
+        zooms: float | Sequence[float] = 1.0,
+        hfov: float | Sequence[float] = 90.0,
+        clip_value: float = 0.05,
+        depth_clip_sensors: Iterable[int] | None = None,
+        world_coord: bool = True,
+        get_all_points: bool = False,
+        use_semantic_sensor: bool = False,
     ):
         self.needs_rng = False
 
@@ -287,9 +289,9 @@ class DepthTo3DLocations:
 
         for i, zoom in enumerate(zooms):
             # Pinhole camera, focal length fx = fy
-            hfov[i] = float(hfov[i] * np.pi / 180.0)
+            hfov_rads = float(hfov[i] * np.pi / 180.0)
 
-            fx = np.tan(hfov[i] / 2.0) / zoom
+            fx = np.tan(hfov_rads / 2.0) / zoom
             fy = fx
 
             # Adjust fy for aspect ratio
@@ -316,9 +318,7 @@ class DepthTo3DLocations:
         self.get_all_points = get_all_points
         self.use_semantic_sensor = use_semantic_sensor
         self.clip_value = clip_value
-        self.depth_clip_sensors = (
-            depth_clip_sensors if depth_clip_sensors is not None else []
-        )
+        self.depth_clip_sensors = set(depth_clip_sensors or [])
 
     def __call__(self, observations: dict, state: State | None = None) -> dict:
         """Apply the depth-to-3D-locations transform to sensor observations.
@@ -352,7 +352,7 @@ class DepthTo3DLocations:
         a few different code paths. Here is a brief outline of the parameters
         that reflect these factors as they are commonly used in Monty:
          - when using a surface agent, self.depth_clip_sensors is a non-empty
-           list. More specifically, we know which sensor is the surface agent
+           set. More specifically, we know which sensor is the surface agent
            since it's index will be in self.depth_clip_sensors. We only apply
            depth clipping to the surface agent.
          - surface agents also have their depth and semantic data clipped to a
